@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Google Sheets — Neo Consulting</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0B1020;
+      color: white;
+      padding: 30px;
+      line-height: 1.6;
+    }
+    .card {
+      max-width: 720px;
+      margin: auto;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 24px;
+      padding: 24px;
+    }
+    code {
+      background: rgba(255,255,255,.12);
+      padding: 3px 6px;
+      border-radius: 8px;
+    }
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-weight: 800;
+      cursor: pointer;
+      background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+      color: white;
+    }
+    #result {
+      margin-top: 20px;
+      color: #34D399;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Test Google Sheets</h1>
+    <p>Cette page sert à vérifier si ton URL Apps Script crée bien le Google Sheets.</p>
+    <p>Avant de tester, colle ton URL <code>/exec</code> dans <code>Config.js</code>.</p>
+    <button id="testButton">Créer / tester le Google Sheets</button>
+    <p id="result"></p>
+  </div>
+
+  <script src="Config.js"></script>
+  <script>
+    const result = document.getElementById("result");
+    document.getElementById("testButton").addEventListener("click", async () => {
+      result.textContent = "Test en cours...";
+
+      if (!GOOGLE_APPS_SCRIPT_URL) {
+        result.style.color = "#FB7185";
+        result.textContent = "Erreur : l’URL n’est pas configurée dans Config.js.";
+        return;
+      }
+
+      try {
+        const response = await fetch(GOOGLE_APPS_SCRIPT_URL);
+        const data = await response.json();
+        result.style.color = data.success ? "#34D399" : "#FB7185";
+        result.textContent = data.success
+          ? "Succès : " + data.message + " Lien Google Sheets : " + data.spreadsheetUrl
+          : "Erreur : " + data.message;
+      } catch (error) {
+        result.style.color = "#FB7185";
+        result.textContent = "Erreur : " + error.message + ". Vérifie que le script est bien déployé en Application Web avec accès Tout le monde.";
+      }
+    });
+  </script>
+</body>
+</html>

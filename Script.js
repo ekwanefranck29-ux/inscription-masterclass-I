@@ -1,6 +1,12 @@
 const paymentData = {
-  "Orange Money": { name: "Orange Money", number: "6 57 16 36 12" },
-  "MTN Mobile Money": { name: "MTN Mobile Money", number: "6 80 06 34 91" }
+  "Orange Money": {
+    name: "Orange Money",
+    number: "6 57 16 36 12"
+  },
+  "MTN Mobile Money": {
+    name: "MTN Mobile Money",
+    number: "6 80 06 34 91"
+  }
 };
 
 const form = document.getElementById("registrationForm");
@@ -14,11 +20,14 @@ const formStatus = document.getElementById("formStatus");
 function setPaymentProvider(provider) {
   const data = paymentData[provider];
   if (!data || !selectedPaymentName || !selectedPaymentNumber || !paymentNumberInput) return;
+
   selectedPaymentName.textContent = data.name;
   selectedPaymentNumber.textContent = data.number;
   paymentNumberInput.value = data.number;
+
   paymentCards.forEach((card) => {
     const input = card.querySelector("input");
+    if (!input) return;
     const isActive = input.value === provider;
     card.classList.toggle("active", isActive);
     input.checked = isActive;
@@ -26,12 +35,16 @@ function setPaymentProvider(provider) {
 }
 
 paymentCards.forEach((card) => {
-  card.addEventListener("click", () => setPaymentProvider(card.querySelector("input").value));
+  card.addEventListener("click", () => {
+    const input = card.querySelector("input");
+    if (input) setPaymentProvider(input.value);
+  });
 });
 
 if (copyButton) {
   copyButton.addEventListener("click", async () => {
     const number = selectedPaymentNumber.textContent.trim();
+
     try {
       await navigator.clipboard.writeText(number);
     } catch (error) {
@@ -42,8 +55,10 @@ if (copyButton) {
       document.execCommand("copy");
       document.body.removeChild(temporaryInput);
     }
+
     copyButton.textContent = "Copié ✓";
     copyButton.classList.add("copied");
+
     setTimeout(() => {
       copyButton.textContent = "Copier";
       copyButton.classList.remove("copied");
@@ -54,18 +69,25 @@ if (copyButton) {
 function validateField(field) {
   const group = field.closest(".field-group");
   if (!group) return true;
+
   const isRequiredEmpty = field.hasAttribute("required") && !field.value.trim();
   const isInvalidEmail = field.type === "email" && field.value.trim() && !field.checkValidity();
   const isInvalid = isRequiredEmpty || isInvalidEmail;
+
   group.classList.toggle("invalid", isInvalid);
   return !isInvalid;
 }
 
 function validateForm() {
   if (!form) return true;
+
   const fields = form.querySelectorAll("input[required], select[required], input[type='email']");
   let isValid = true;
-  fields.forEach((field) => { if (!validateField(field)) isValid = false; });
+
+  fields.forEach((field) => {
+    if (!validateField(field)) isValid = false;
+  });
+
   return isValid;
 }
 
@@ -78,32 +100,46 @@ if (form) {
 
 async function saveToGoogleSheets(registrationData) {
   if (!GOOGLE_APPS_SCRIPT_URL || GOOGLE_APPS_SCRIPT_URL.trim() === "") {
-    throw new Error("L’URL Google Apps Script n’est pas encore configurée dans Config.js.");
+    throw new Error("L’URL Google Apps Script n’est pas configurée dans Config.js.");
   }
-  const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+
+  /*
+   * IMPORTANT :
+   * Google Apps Script bloque souvent la lecture de la réponse depuis GitHub Pages à cause du CORS.
+   * mode:"no-cors" permet au formulaire d’envoyer les données même si le navigateur ne peut pas lire la réponse.
+   */
+  await fetch(GOOGLE_APPS_SCRIPT_URL, {
     method: "POST",
-    mode: "cors",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    mode: "no-cors",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
     body: JSON.stringify(registrationData)
   });
-  const result = await response.json();
-  if (!result.success) throw new Error(result.message || "Erreur pendant l’enregistrement dans Google Sheets.");
-  return result;
+
+  return {
+    success: true,
+    message: "Données envoyées vers Google Sheets."
+  };
 }
 
 if (form) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+
     formStatus.className = "form-status";
     formStatus.textContent = "";
+
     if (!validateForm()) {
       formStatus.classList.add("error");
       formStatus.textContent = "Merci de remplir correctement tous les champs obligatoires, surtout l’ID de transaction.";
       return;
     }
+
     const submitButton = form.querySelector(".submit-btn");
     submitButton.disabled = true;
     submitButton.querySelector("span").textContent = "Enregistrement...";
+
     const formData = new FormData(form);
     const registrationData = {
       fullName: formData.get("fullName").trim(),
@@ -116,10 +152,12 @@ if (form) {
       source: "Neo Consulting - Masterclass IA",
       createdAt: new Date().toISOString()
     };
+
     try {
-      const result = await saveToGoogleSheets(registrationData);
+      await saveToGoogleSheets(registrationData);
+
       formStatus.classList.add("success");
-      formStatus.textContent = `Inscription enregistrée avec succès. Numéro d’ordre : ${result.registrationNumber}.`;
+      formStatus.textContent = "Inscription envoyée. Vérifie ton Google Sheets pour confirmer l’enregistrement.";
       form.reset();
       setPaymentProvider("Orange Money");
     } catch (error) {
@@ -133,12 +171,18 @@ if (form) {
 }
 
 const revealElements = document.querySelectorAll(".reveal");
-const revealObserver = new IntersectionObserver((entries) => {
-  entries.forEach((entry) => {
-    if (entry.isIntersecting) {
-      entry.target.classList.add("visible");
-      revealObserver.unobserve(entry.target);
-    }
-  });
-}, { threshold: 0.16 });
-revealElements.forEach((element) => revealObserver.observe(element));
+
+if ("IntersectionObserver" in window) {
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("visible");
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.16 });
+
+  revealElements.forEach((element) => revealObserver.observe(element));
+} else {
+  revealElements.forEach((element) => element.classList.add("visible"));
+}

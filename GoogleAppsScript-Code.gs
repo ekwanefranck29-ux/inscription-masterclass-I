@@ -1,20 +1,12 @@
 /**
- * Google Apps Script — Backend du formulaire d’inscription
+ * Google Apps Script — Backend Neo Consulting
  *
- * Rôle :
- * 1. Crée automatiquement un Google Sheets s’il n’existe pas encore.
- * 2. Crée l’onglet "Inscriptions".
- * 3. Ajoute les colonnes dans le bon ordre.
- * 4. Enregistre chaque inscription par ordre d’arrivée.
- * 5. Ajoute un numéro d’ordre automatique.
- *
- * Déploiement :
- * - Extensions > Apps Script
- * - Coller ce code
- * - Déployer > Nouveau déploiement > Application Web
- * - Exécuter en tant que : Moi
- * - Qui a accès : Tout le monde
- * - Copier l’URL /exec dans Config.js
+ * Ce script :
+ * - crée automatiquement un Google Sheets dans ton Google Drive ;
+ * - crée l’onglet "Inscriptions" ;
+ * - range les colonnes dans le bon ordre ;
+ * - ajoute chaque inscription par ordre d’arrivée ;
+ * - évite les problèmes CORS fréquents avec GitHub Pages.
  */
 
 const SPREADSHEET_NAME = "Inscriptions Masterclass IA - Neo Consulting";
@@ -36,34 +28,30 @@ const HEADERS = [
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents || "{}");
-
+    const data = parseRequestData(e);
     validateData(data);
 
     const sheet = getOrCreateSheet();
     ensureHeaders(sheet);
 
-    const lastRow = sheet.getLastRow();
-    const registrationNumber = Math.max(1, lastRow);
-
+    const registrationNumber = getNextRegistrationNumber(sheet);
     const createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
 
     const row = [
       registrationNumber,
       createdAt,
-      data.fullName,
-      data.whatsapp,
-      data.email || "",
-      data.profile,
-      data.paymentMethod,
-      data.paymentNumber,
-      data.transactionId,
-      data.source || "Neo Consulting - Masterclass IA",
+      clean(data.fullName),
+      clean(data.whatsapp),
+      clean(data.email || ""),
+      clean(data.profile),
+      clean(data.paymentMethod),
+      clean(data.paymentNumber),
+      clean(data.transactionId),
+      clean(data.source || "Neo Consulting - Masterclass IA"),
       "En attente de vérification"
     ];
 
     sheet.appendRow(row);
-    sortSheetByRegistrationNumber(sheet);
     formatSheet(sheet);
 
     return jsonResponse({
@@ -88,9 +76,31 @@ function doGet() {
 
   return jsonResponse({
     success: true,
-    message: "Google Sheets Neo Consulting prêt.",
+    message: "Google Sheets créé et prêt.",
     spreadsheetUrl: sheet.getParent().getUrl()
   });
+}
+
+function parseRequestData(e) {
+  if (!e) {
+    throw new Error("Aucune requête reçue.");
+  }
+
+  // Cas 1 : JSON envoyé en text/plain
+  if (e.postData && e.postData.contents) {
+    try {
+      return JSON.parse(e.postData.contents);
+    } catch (error) {
+      // On continue vers e.parameter si le contenu n'est pas du JSON.
+    }
+  }
+
+  // Cas 2 : FormData / x-www-form-urlencoded
+  if (e.parameter && Object.keys(e.parameter).length > 0) {
+    return e.parameter;
+  }
+
+  throw new Error("Données du formulaire introuvables.");
 }
 
 function validateData(data) {
@@ -113,13 +123,13 @@ function validateData(data) {
 function getOrCreateSheet() {
   const properties = PropertiesService.getScriptProperties();
   let spreadsheetId = properties.getProperty("SPREADSHEET_ID");
-  let spreadsheet;
+  let spreadsheet = null;
 
   if (spreadsheetId) {
     try {
       spreadsheet = SpreadsheetApp.openById(spreadsheetId);
     } catch (error) {
-      spreadsheet = null;
+      properties.deleteProperty("SPREADSHEET_ID");
     }
   }
 
@@ -134,41 +144,47 @@ function getOrCreateSheet() {
     sheet = spreadsheet.insertSheet(SHEET_NAME);
   }
 
-  const defaultSheet = spreadsheet.getSheetByName("Sheet1") || spreadsheet.getSheetByName("Feuille 1");
-  if (defaultSheet && defaultSheet.getName() !== SHEET_NAME && spreadsheet.getSheets().length > 1) {
-    spreadsheet.deleteSheet(defaultSheet);
-  }
+  const defaultSheets = ["Sheet1", "Feuille 1"];
+  defaultSheets.forEach(function(defaultName) {
+    const defaultSheet = spreadsheet.getSheetByName(defaultName);
+    if (defaultSheet && defaultSheet.getName() !== SHEET_NAME && spreadsheet.getSheets().length > 1) {
+      spreadsheet.deleteSheet(defaultSheet);
+    }
+  });
 
   return sheet;
 }
 
 function ensureHeaders(sheet) {
-  const currentHeaders = sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0];
-  const isHeaderMissing = currentHeaders.join("").trim() === "";
-
-  if (isHeaderMissing) {
-    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-    return;
-  }
+  const headerRange = sheet.getRange(1, 1, 1, HEADERS.length);
+  const currentHeaders = headerRange.getValues()[0];
 
   const needsUpdate = HEADERS.some(function(header, index) {
     return currentHeaders[index] !== header;
   });
 
   if (needsUpdate) {
-    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    headerRange.setValues([HEADERS]);
   }
 }
 
-function sortSheetByRegistrationNumber(sheet) {
+function getNextRegistrationNumber(sheet) {
   const lastRow = sheet.getLastRow();
 
-  if (lastRow <= 2) {
-    return;
+  if (lastRow < 2) {
+    return 1;
   }
 
-  const range = sheet.getRange(2, 1, lastRow - 1, HEADERS.length);
-  range.sort({ column: 1, ascending: true });
+  const values = sheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+  const numbers = values
+    .map(function(value) { return Number(value); })
+    .filter(function(value) { return !isNaN(value); });
+
+  if (numbers.length === 0) {
+    return 1;
+  }
+
+  return Math.max.apply(null, numbers) + 1;
 }
 
 function formatSheet(sheet) {
@@ -176,6 +192,7 @@ function formatSheet(sheet) {
   const lastColumn = HEADERS.length;
 
   sheet.setFrozenRows(1);
+
   sheet.getRange(1, 1, 1, lastColumn)
     .setFontWeight("bold")
     .setBackground("#0B1020")
@@ -185,11 +202,18 @@ function formatSheet(sheet) {
     .setHorizontalAlignment("left")
     .setVerticalAlignment("middle");
 
+  const existingFilter = sheet.getFilter();
+  if (existingFilter) {
+    existingFilter.remove();
+  }
+
   sheet.getRange(1, 1, lastRow, lastColumn).createFilter();
-
   sheet.autoResizeColumns(1, lastColumn);
-
   sheet.getRange("B:B").setNumberFormat("dd/mm/yyyy hh:mm:ss");
+}
+
+function clean(value) {
+  return String(value || "").trim();
 }
 
 function jsonResponse(object) {
