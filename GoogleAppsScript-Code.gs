@@ -1,22 +1,23 @@
 /**
  * Google Apps Script — Backend Neo Consulting
  *
- * Fonctionnalités :
- * - crée automatiquement un Google Sheets ;
+ * Ce script :
+ * - crée automatiquement un Google Sheets dans ton Google Drive ;
  * - crée l’onglet "Inscriptions" ;
- * - enregistre les inscriptions par ordre d’arrivée ;
- * - ajoute le type de pass et le montant ;
- * - envoie un mail de confirmation inspiré du flyer si l’email est renseigné.
+ * - range les colonnes dans le bon ordre ;
+ * - ajoute chaque inscription par ordre d’arrivée ;
+ * - évite les problèmes CORS fréquents avec GitHub Pages.
  */
 
 const SPREADSHEET_NAME = "Inscriptions Masterclass IA - Neo Consulting";
 const SHEET_NAME = "Inscriptions";
 
-const EVENT_TITLE = "Masterclass IA — Neo Consulting";
-const EVENT_DATE = "Samedi 29 Août 2026";
-const EVENT_TIME = "9h à 13h";
-const EVENT_LOCATION = "Ma case EDEN MEDIAS, Bastos — Yaoundé";
-const EVENT_CONTACT = "+237 657 163 612";
+// Identifiant du Google Sheets à utiliser en priorité (celui que tu veux garder).
+// Trouvable dans l'URL : https://docs.google.com/spreadsheets/d/**CET_ID**/edit
+const TARGET_SPREADSHEET_ID = "1tawu8PH0m3rq5f9tzOcWTxnEfYhLebcMZP7ZrYnuWTI";
+
+// Identifiant du bon onglet dans ce fichier (le "gid" à la fin de l'URL, après #gid=).
+const TARGET_SHEET_GID = 635582716;
 
 const HEADERS = [
   "N°",
@@ -25,14 +26,12 @@ const HEADERS = [
   "WhatsApp",
   "Email",
   "Profil",
-  "Type de pass",
-  "Montant",
+  "Pass",
   "Mode de paiement",
   "Numéro de paiement",
   "ID de transaction",
   "Source",
-  "Statut",
-  "Email envoyé"
+  "Statut"
 ];
 
 function doPost(e) {
@@ -46,13 +45,6 @@ function doPost(e) {
     const registrationNumber = getNextRegistrationNumber(sheet);
     const createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
 
-    let emailStatus = "Non renseigné";
-
-    if (data.email && String(data.email).trim() !== "") {
-      sendConfirmationEmail(data, registrationNumber);
-      emailStatus = "Envoyé";
-    }
-
     const row = [
       registrationNumber,
       createdAt,
@@ -60,28 +52,31 @@ function doPost(e) {
       clean(data.whatsapp),
       clean(data.email || ""),
       clean(data.profile),
-      clean(data.passType),
-      clean(data.passPrice),
+      clean(data.pass),
       clean(data.paymentMethod),
       clean(data.paymentNumber),
       clean(data.transactionId),
       clean(data.source || "Neo Consulting - Masterclass IA"),
-      "En attente de vérification",
-      emailStatus
+      "En attente de vérification"
     ];
 
     sheet.appendRow(row);
     formatSheet(sheet);
+    Logger.log("Ligne ajoutée. Sheets : " + sheet.getParent().getUrl());
+
+    if (data.email && String(data.email).trim() !== "") {
+      sendConfirmationEmail_(data, registrationNumber);
+    }
 
     return jsonResponse({
       success: true,
       message: "Inscription enregistrée avec succès.",
       registrationNumber: registrationNumber,
-      spreadsheetUrl: sheet.getParent().getUrl(),
-      emailStatus: emailStatus
+      spreadsheetUrl: sheet.getParent().getUrl()
     });
 
   } catch (error) {
+    Logger.log("Erreur doPost : " + error.message);
     return jsonResponse({
       success: false,
       message: error.message
@@ -106,12 +101,16 @@ function parseRequestData(e) {
     throw new Error("Aucune requête reçue.");
   }
 
+  // Cas 1 : JSON envoyé en text/plain
   if (e.postData && e.postData.contents) {
     try {
       return JSON.parse(e.postData.contents);
-    } catch (error) {}
+    } catch (error) {
+      // On continue vers e.parameter si le contenu n'est pas du JSON.
+    }
   }
 
+  // Cas 2 : FormData / x-www-form-urlencoded
   if (e.parameter && Object.keys(e.parameter).length > 0) {
     return e.parameter;
   }
@@ -124,8 +123,7 @@ function validateData(data) {
     "fullName",
     "whatsapp",
     "profile",
-    "passType",
-    "passPrice",
+    "pass",
     "paymentMethod",
     "paymentNumber",
     "transactionId"
@@ -140,23 +138,45 @@ function validateData(data) {
 
 function getOrCreateSheet() {
   const properties = PropertiesService.getScriptProperties();
-  let spreadsheetId = properties.getProperty("SPREADSHEET_ID");
   let spreadsheet = null;
 
-  if (spreadsheetId) {
+  // 1. Priorité absolue : le fichier désigné par l'utilisateur.
+  if (TARGET_SPREADSHEET_ID) {
     try {
-      spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+      spreadsheet = SpreadsheetApp.openById(TARGET_SPREADSHEET_ID);
+      properties.setProperty("SPREADSHEET_ID", TARGET_SPREADSHEET_ID);
     } catch (error) {
-      properties.deleteProperty("SPREADSHEET_ID");
+      Logger.log("Impossible d'ouvrir TARGET_SPREADSHEET_ID : " + error.message);
     }
   }
 
+  // 2. Repli : le dernier fichier connu via les propriétés du script.
+  if (!spreadsheet) {
+    const spreadsheetId = properties.getProperty("SPREADSHEET_ID");
+    if (spreadsheetId) {
+      try {
+        spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+      } catch (error) {
+        properties.deleteProperty("SPREADSHEET_ID");
+      }
+    }
+  }
+
+  // 3. Dernier recours : en créer un nouveau.
   if (!spreadsheet) {
     spreadsheet = SpreadsheetApp.create(SPREADSHEET_NAME);
     properties.setProperty("SPREADSHEET_ID", spreadsheet.getId());
   }
 
   let sheet = spreadsheet.getSheetByName(SHEET_NAME);
+
+  // Si l'onglet "Inscriptions" n'existe pas dans ce fichier, on utilise l'onglet
+  // correspondant au gid fourni dans ton URL, pour ne pas créer un onglet vide en double.
+  if (!sheet && TARGET_SHEET_GID !== null) {
+    sheet = spreadsheet.getSheets().filter(function(s) {
+      return s.getSheetId() === TARGET_SHEET_GID;
+    })[0] || null;
+  }
 
   if (!sheet) {
     sheet = spreadsheet.insertSheet(SHEET_NAME);
@@ -183,6 +203,13 @@ function ensureHeaders(sheet) {
 
   if (needsUpdate) {
     headerRange.setValues([HEADERS]);
+  }
+
+  // Nettoie toute colonne en trop laissée par une version précédente du script
+  // (ex : anciens en-têtes "Statut" dupliqués au-delà de la dernière colonne utile).
+  const maxColumns = sheet.getMaxColumns();
+  if (maxColumns > HEADERS.length) {
+    sheet.getRange(1, HEADERS.length + 1, sheet.getMaxRows(), maxColumns - HEADERS.length).clearContent();
   }
 }
 
@@ -230,146 +257,107 @@ function formatSheet(sheet) {
   sheet.getRange("B:B").setNumberFormat("dd/mm/yyyy hh:mm:ss");
 }
 
-function sendConfirmationEmail(data, registrationNumber) {
-  const subject = "Confirmation d’inscription — Masterclass IA Neo Consulting";
-
-  const htmlBody = buildConfirmationEmail(data, registrationNumber);
-
-  MailApp.sendEmail({
-    to: clean(data.email),
-    subject: subject,
-    htmlBody: htmlBody,
-    name: "Neo Consulting"
-  });
-}
-
-function buildConfirmationEmail(data, registrationNumber) {
-  const fullName = escapeHtml(data.fullName);
-  const whatsapp = escapeHtml(data.whatsapp);
-  const email = escapeHtml(data.email || "");
-  const profile = escapeHtml(data.profile);
-  const passType = escapeHtml(data.passType);
-  const passPrice = escapeHtml(data.passPrice);
-  const paymentMethod = escapeHtml(data.paymentMethod);
-  const transactionId = escapeHtml(data.transactionId);
-
-  return `
-  <div style="margin:0;padding:0;background:#2b2430;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
-    <div style="max-width:680px;margin:0 auto;padding:28px 18px;">
-
-      <div style="background:linear-gradient(135deg,#3a303f,#1f1a24);border-radius:28px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);">
-
-        <div style="padding:34px 28px 24px;">
-          <div style="display:inline-block;padding:8px 14px;border:2px solid #f2bd2f;border-radius:999px;color:#f2bd2f;font-weight:700;font-size:14px;margin-bottom:22px;">
-            Fais partie de l’aventure !
-          </div>
-
-          <h1 style="margin:0;font-size:42px;line-height:1.05;color:#ffe8d6;font-weight:900;">
-            Utilise l’IA<br>
-            Avant qu’elle<br>
-            Te remplace
-          </h1>
-
-          <p style="font-size:18px;line-height:1.6;color:#f5f0ea;margin-top:22px;">
-            Bonjour <strong>${fullName}</strong>,
-          </p>
-
-          <p style="font-size:16px;line-height:1.7;color:#f5f0ea;">
-            Ton inscription à la masterclass IA de <strong>Neo Consulting</strong> a bien été reçue.
-            Cette formation te donnera les clés pour mieux utiliser l’IA dans tes publications, ton travail, tes idées et tes projets.
-          </p>
-        </div>
-
-        <div style="margin:0 28px 24px;padding:24px;background:rgba(0,0,0,0.35);border-radius:22px;border:1px solid rgba(255,255,255,0.08);">
-          <h2 style="margin:0 0 16px;color:#f2bd2f;font-size:28px;font-family:Georgia,serif;font-weight:400;">
-            Au programme
-          </h2>
-
-          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 1 :</strong> comprendre l’IA sans jargon</p>
-          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 2 :</strong> savoir communiquer avec l’IA</p>
-          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 3 :</strong> les cas d’usage qui changent le quotidien</p>
-          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 4 :</strong> construire son avantage avec l’IA</p>
-        </div>
-
-        <div style="padding:0 28px 24px;">
-          <div style="display:grid;gap:14px;">
-
-            <div style="padding:18px;background:#ffffff;border-radius:20px;color:#251d27;">
-              <p style="margin:0;font-size:14px;color:#7a6f7f;">Date & heure</p>
-              <p style="margin:6px 0 0;font-size:20px;font-weight:900;">
-                ${EVENT_DATE} — de ${EVENT_TIME}
-              </p>
-            </div>
-
-            <div style="padding:18px;background:#ffffff;border-radius:20px;color:#251d27;">
-              <p style="margin:0;font-size:14px;color:#7a6f7f;">Lieu</p>
-              <p style="margin:6px 0 0;font-size:20px;font-weight:900;">
-                ${EVENT_LOCATION}
-              </p>
-            </div>
-
-            <div style="padding:18px;background:#6e1014;border-radius:20px;color:#ffffff;">
-              <p style="margin:0;font-size:14px;color:#ff9aa2;">Ton pass</p>
-              <p style="margin:6px 0 0;font-size:20px;font-weight:900;">
-                ${passType} : ${passPrice}
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        <div style="margin:0 28px 24px;padding:20px;background:rgba(242,189,47,0.12);border:1px solid rgba(242,189,47,0.35);border-radius:22px;">
-          <h3 style="margin:0 0 12px;color:#f2bd2f;font-size:20px;">
-            Détails de ton inscription
-          </h3>
-
-          <p style="margin:7px 0;color:#ffffff;"><strong>N° d’ordre :</strong> ${registrationNumber}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>Nom :</strong> ${fullName}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>WhatsApp :</strong> ${whatsapp}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>Email :</strong> ${email}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>Profil :</strong> ${profile}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>Pass :</strong> ${passType} — ${passPrice}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>Mode de paiement :</strong> ${paymentMethod}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>ID de transaction :</strong> ${transactionId}</p>
-          <p style="margin:7px 0;color:#ffffff;"><strong>Statut :</strong> En attente de vérification</p>
-        </div>
-
-        <div style="padding:0 28px 32px;">
-          <p style="font-size:15px;line-height:1.7;color:#f5f0ea;">
-            Ton inscription sera définitivement confirmée après vérification du paiement.
-            Garde bien ton ID de transaction, il pourra être demandé à l’entrée.
-          </p>
-
-          <div style="margin-top:22px;padding:18px;background:#ffffff;border-radius:999px;text-align:center;color:#251d27;font-weight:900;">
-            Pour plus d’informations : ${EVENT_CONTACT}
-          </div>
-
-          <p style="margin-top:24px;font-size:14px;line-height:1.6;color:#cfc4d6;text-align:center;">
-            Neo Consulting<br>
-            IA • Business • Digital
-          </p>
-        </div>
-
-      </div>
-    </div>
-  </div>`;
-}
-
 function clean(value) {
   return String(value || "").trim();
 }
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+/**
+ * Envoie un email de confirmation formel au participant, avec date, lieu,
+ * heure et pass choisi. N'interrompt jamais l'inscription en cas d'échec d'envoi.
+ */
+function sendConfirmationEmail_(data, registrationNumber) {
+  try {
+    const subject = "Confirmation de votre inscription — Masterclass IA Neo Consulting";
+
+    const body =
+      "Bonjour " + clean(data.fullName) + ",\n\n" +
+      "Nous vous confirmons la bonne réception de votre inscription à la Masterclass « Utilise l’IA avant qu’elle te remplace », organisée par Neo Consulting.\n\n" +
+      "Voici le récapitulatif de votre inscription (n° " + registrationNumber + ") :\n\n" +
+      "— Date : samedi 29 août 2026\n" +
+      "— Heure : de 9h à 13h\n" +
+      "— Lieu : Ma Casse Eden Medias, Bastos, Yaoundé\n" +
+      "   (entre le laboratoire Meka et la résidence du Nigeria, immeuble en face de la Caisse des dépôts et consignations)\n" +
+      "— Pass choisi : " + clean(data.pass) + "\n" +
+      "— Mode de paiement : " + clean(data.paymentMethod) + "\n" +
+      "— ID de transaction transmis : " + clean(data.transactionId) + "\n\n" +
+      "Votre paiement est en cours de vérification ; vous recevrez une confirmation définitive par WhatsApp dans les meilleurs délais.\n\n" +
+      "Nous vous remercions pour votre confiance et sommes impatients de vous accueillir à cette session.\n\n" +
+      "Bien cordialement,\n" +
+      "L’équipe Neo Consulting";
+
+    MailApp.sendEmail(clean(data.email), subject, body);
+  } catch (error) {
+    Logger.log("Erreur envoi email : " + error.message);
+  }
 }
 
 function jsonResponse(object) {
   return ContentService
     .createTextOutput(JSON.stringify(object))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * DIAGNOSTIC — à exécuter manuellement si le Google Sheets semble introuvable.
+ * Affiche dans les logs (icône ⏱️ Exécutions) l'URL exacte du classeur utilisé
+ * par le script, et son nombre de lignes actuel.
+ */
+function getSheetUrl() {
+  const sheet = getOrCreateSheet();
+  ensureHeaders(sheet);
+  Logger.log("URL du Google Sheets : " + sheet.getParent().getUrl());
+  Logger.log("Nom du fichier : " + sheet.getParent().getName());
+  Logger.log("Nombre de lignes (avec en-tête) : " + sheet.getLastRow());
+  Logger.log("Compte Google exécutant le script : " + Session.getActiveUser().getEmail());
+}
+
+/**
+ * FONCTION DE DIAGNOSTIC — à exécuter manuellement depuis l'éditeur Apps Script
+ * (sélectionne "testSetup" dans le menu déroulant à côté du bouton ▶ Exécuter, puis clique dessus).
+ *
+ * Elle : crée/vérifie le Google Sheets, y ajoute une ligne de test, et t'envoie
+ * un email de test à TOI-MÊME (l'adresse du compte Google connecté).
+ *
+ * La toute première exécution te demandera d'autoriser le script (accès à
+ * Google Sheets et à l'envoi d'emails) — c'est normal, accepte les autorisations.
+ * Regarde ensuite l'onglet "Exécutions" (icône horloge à gauche) si quelque
+ * chose échoue : le message d'erreur exact y sera affiché.
+ */
+function testSetup() {
+  const sheet = getOrCreateSheet();
+  ensureHeaders(sheet);
+
+  const testData = {
+    fullName: "Test Diagnostic",
+    whatsapp: "600000000",
+    email: Session.getActiveUser().getEmail(),
+    profile: "Autre",
+    pass: "Débutant (15 000 FCFA)",
+    paymentMethod: "Orange Money",
+    paymentNumber: "657163612",
+    transactionId: "TEST-0000"
+  };
+
+  const registrationNumber = getNextRegistrationNumber(sheet);
+
+  sheet.appendRow([
+    registrationNumber,
+    new Date(),
+    testData.fullName,
+    testData.whatsapp,
+    testData.email,
+    testData.profile,
+    testData.pass,
+    testData.paymentMethod,
+    testData.paymentNumber,
+    testData.transactionId,
+    "Test diagnostic",
+    "Test"
+  ]);
+  formatSheet(sheet);
+
+  sendConfirmationEmail_(testData, registrationNumber);
+
+  Logger.log("Test terminé. Sheet : " + sheet.getParent().getUrl());
+  Logger.log("Email envoyé à : " + testData.email);
 }

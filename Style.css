@@ -459,7 +459,7 @@ input:focus, select:focus {
 
 .payment-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 20px; }
 
-.payment-card {
+.payment-card, .pass-card {
   min-height: 92px;
   border-radius: 22px;
   border: 1px solid var(--border);
@@ -472,13 +472,13 @@ input:focus, select:focus {
   transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
 }
 
-.payment-card:hover, .payment-card.active {
+.payment-card:hover, .payment-card.active, .pass-card:hover, .pass-card.active {
   transform: translateY(-3px);
   border-color: rgba(245, 184, 75, 0.48);
   background: rgba(245, 184, 75, 0.08);
 }
 
-.payment-card input {
+.payment-card input, .pass-card input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -498,8 +498,8 @@ input:focus, select:focus {
 .payment-logo.orange { background: linear-gradient(135deg, #ffedd5, var(--orange)); }
 .payment-logo.mtn { background: linear-gradient(135deg, #fef9c3, var(--yellow)); }
 
-.payment-card strong, .payment-card small { display: block; }
-.payment-card small { color: var(--muted); margin-top: 5px; }
+.payment-card strong, .payment-card small, .pass-card strong, .pass-card small { display: block; }
+.payment-card small, .pass-card small { color: var(--muted); margin-top: 5px; }
 
 .copy-box {
   margin: 16px 0 18px;
@@ -634,7 +634,7 @@ input:focus, select:focus {
 
   h1 { font-size: clamp(2.7rem, 16vw, 4.2rem); }
 
-  .trust-row, .mini-dashboard, .form-grid, .payment-options, .pass-options, .module-grid {
+  .trust-row, .mini-dashboard, .form-grid, .payment-options, .module-grid {
     grid-template-columns: 1fr;
   }
 
@@ -684,88 +684,4 @@ input:focus, select:focus {
   font-size: 1.05rem;
   max-width: 700px;
   margin: 0 auto 26px;
-}
-
-
-.pass-card small {
-  margin-top: 6px;
-  color: var(--gold);
-  font-size: 1.05rem;
-  font-weight: 900;
-}
-
-
-/* Choix du pass — visible dans le formulaire */
-.pass-panel {
-  margin-top: 30px;
-  padding-top: 26px;
-  border-top: 1px solid var(--border);
-}
-
-.pass-options {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-  margin-top: 20px;
-}
-
-.pass-card {
-  min-height: 106px;
-  border-radius: 22px;
-  border: 1px solid var(--border);
-  background:
-    radial-gradient(circle at top right, rgba(245, 184, 75, 0.10), transparent 42%),
-    rgba(255, 255, 255, 0.055);
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  transition: transform 0.22s ease, border-color 0.22s ease, background 0.22s ease;
-}
-
-.pass-card:hover,
-.pass-card.active {
-  transform: translateY(-3px);
-  border-color: rgba(245, 184, 75, 0.52);
-  background:
-    radial-gradient(circle at top right, rgba(245, 184, 75, 0.18), transparent 42%),
-    rgba(245, 184, 75, 0.08);
-}
-
-.pass-card input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.pass-badge {
-  width: 62px;
-  height: 62px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, rgba(245, 184, 75, 0.24), rgba(59, 130, 246, 0.20));
-  border: 1px solid rgba(245, 184, 75, 0.26);
-  color: #fde68a;
-  font-weight: 900;
-  font-size: 0.76rem;
-  flex: 0 0 auto;
-}
-
-.pass-badge.expert {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.28), rgba(245, 184, 75, 0.18));
-  color: #ddd6fe;
-}
-
-.pass-card strong,
-.pass-card small {
-  display: block;
-}
-
-.pass-card small {
-  margin-top: 6px;
-  color: var(--gold);
-  font-size: 1.05rem;
-  font-weight: 900;
 }
