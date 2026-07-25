@@ -11,9 +11,11 @@ const paymentData = {
 
 const form = document.getElementById("registrationForm");
 const paymentCards = document.querySelectorAll(".payment-card");
+const passCards = document.querySelectorAll(".pass-card");
 const selectedPaymentName = document.getElementById("selectedPaymentName");
 const selectedPaymentNumber = document.getElementById("selectedPaymentNumber");
 const paymentNumberInput = document.getElementById("paymentNumber");
+const passPriceInput = document.getElementById("passPrice");
 const copyButton = document.getElementById("copyButton");
 const formStatus = document.getElementById("formStatus");
 
@@ -34,10 +36,32 @@ function setPaymentProvider(provider) {
   });
 }
 
+function setPassType(selectedInput) {
+  if (!selectedInput) return;
+
+  passCards.forEach((card) => {
+    const input = card.querySelector("input");
+    const isActive = input === selectedInput;
+    card.classList.toggle("active", isActive);
+    if (input) input.checked = isActive;
+  });
+
+  if (passPriceInput) {
+    passPriceInput.value = selectedInput.dataset.price || "";
+  }
+}
+
 paymentCards.forEach((card) => {
   card.addEventListener("click", () => {
     const input = card.querySelector("input");
     if (input) setPaymentProvider(input.value);
+  });
+});
+
+passCards.forEach((card) => {
+  card.addEventListener("click", () => {
+    const input = card.querySelector("input");
+    setPassType(input);
   });
 });
 
@@ -103,11 +127,6 @@ async function saveToGoogleSheets(registrationData) {
     throw new Error("L’URL Google Apps Script n’est pas configurée dans Config.js.");
   }
 
-  /*
-   * IMPORTANT :
-   * Google Apps Script bloque souvent la lecture de la réponse depuis GitHub Pages à cause du CORS.
-   * mode:"no-cors" permet au formulaire d’envoyer les données même si le navigateur ne peut pas lire la réponse.
-   */
   await fetch(GOOGLE_APPS_SCRIPT_URL, {
     method: "POST",
     mode: "no-cors",
@@ -141,11 +160,15 @@ if (form) {
     submitButton.querySelector("span").textContent = "Enregistrement...";
 
     const formData = new FormData(form);
+    const selectedPassInput = form.querySelector("input[name='passType']:checked");
+
     const registrationData = {
       fullName: formData.get("fullName").trim(),
       whatsapp: formData.get("whatsapp").trim(),
       email: formData.get("email").trim(),
       profile: formData.get("profile"),
+      passType: formData.get("passType"),
+      passPrice: selectedPassInput ? selectedPassInput.dataset.price : formData.get("passPrice"),
       paymentMethod: formData.get("paymentMethod"),
       paymentNumber: formData.get("paymentNumber"),
       transactionId: formData.get("transactionId").trim(),
@@ -157,9 +180,11 @@ if (form) {
       await saveToGoogleSheets(registrationData);
 
       formStatus.classList.add("success");
-      formStatus.textContent = "Inscription envoyée. Vérifie ton Google Sheets pour confirmer l’enregistrement.";
+      formStatus.textContent = "Inscription envoyée. Un mail de confirmation sera envoyé si l’adresse email est renseignée.";
       form.reset();
       setPaymentProvider("Orange Money");
+      const defaultPass = form.querySelector("input[name='passType'][value='Débutant']");
+      setPassType(defaultPass);
     } catch (error) {
       formStatus.classList.add("error");
       formStatus.textContent = error.message;

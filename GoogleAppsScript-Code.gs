@@ -1,16 +1,22 @@
 /**
  * Google Apps Script — Backend Neo Consulting
  *
- * Ce script :
- * - crée automatiquement un Google Sheets dans ton Google Drive ;
+ * Fonctionnalités :
+ * - crée automatiquement un Google Sheets ;
  * - crée l’onglet "Inscriptions" ;
- * - range les colonnes dans le bon ordre ;
- * - ajoute chaque inscription par ordre d’arrivée ;
- * - évite les problèmes CORS fréquents avec GitHub Pages.
+ * - enregistre les inscriptions par ordre d’arrivée ;
+ * - ajoute le type de pass et le montant ;
+ * - envoie un mail de confirmation inspiré du flyer si l’email est renseigné.
  */
 
 const SPREADSHEET_NAME = "Inscriptions Masterclass IA - Neo Consulting";
 const SHEET_NAME = "Inscriptions";
+
+const EVENT_TITLE = "Masterclass IA — Neo Consulting";
+const EVENT_DATE = "Samedi 29 Août 2026";
+const EVENT_TIME = "9h à 13h";
+const EVENT_LOCATION = "Ma case EDEN MEDIAS, Bastos — Yaoundé";
+const EVENT_CONTACT = "+237 657 163 612";
 
 const HEADERS = [
   "N°",
@@ -19,11 +25,14 @@ const HEADERS = [
   "WhatsApp",
   "Email",
   "Profil",
+  "Type de pass",
+  "Montant",
   "Mode de paiement",
   "Numéro de paiement",
   "ID de transaction",
   "Source",
-  "Statut"
+  "Statut",
+  "Email envoyé"
 ];
 
 function doPost(e) {
@@ -37,6 +46,13 @@ function doPost(e) {
     const registrationNumber = getNextRegistrationNumber(sheet);
     const createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
 
+    let emailStatus = "Non renseigné";
+
+    if (data.email && String(data.email).trim() !== "") {
+      sendConfirmationEmail(data, registrationNumber);
+      emailStatus = "Envoyé";
+    }
+
     const row = [
       registrationNumber,
       createdAt,
@@ -44,11 +60,14 @@ function doPost(e) {
       clean(data.whatsapp),
       clean(data.email || ""),
       clean(data.profile),
+      clean(data.passType),
+      clean(data.passPrice),
       clean(data.paymentMethod),
       clean(data.paymentNumber),
       clean(data.transactionId),
       clean(data.source || "Neo Consulting - Masterclass IA"),
-      "En attente de vérification"
+      "En attente de vérification",
+      emailStatus
     ];
 
     sheet.appendRow(row);
@@ -58,7 +77,8 @@ function doPost(e) {
       success: true,
       message: "Inscription enregistrée avec succès.",
       registrationNumber: registrationNumber,
-      spreadsheetUrl: sheet.getParent().getUrl()
+      spreadsheetUrl: sheet.getParent().getUrl(),
+      emailStatus: emailStatus
     });
 
   } catch (error) {
@@ -86,16 +106,12 @@ function parseRequestData(e) {
     throw new Error("Aucune requête reçue.");
   }
 
-  // Cas 1 : JSON envoyé en text/plain
   if (e.postData && e.postData.contents) {
     try {
       return JSON.parse(e.postData.contents);
-    } catch (error) {
-      // On continue vers e.parameter si le contenu n'est pas du JSON.
-    }
+    } catch (error) {}
   }
 
-  // Cas 2 : FormData / x-www-form-urlencoded
   if (e.parameter && Object.keys(e.parameter).length > 0) {
     return e.parameter;
   }
@@ -108,6 +124,8 @@ function validateData(data) {
     "fullName",
     "whatsapp",
     "profile",
+    "passType",
+    "passPrice",
     "paymentMethod",
     "paymentNumber",
     "transactionId"
@@ -212,8 +230,142 @@ function formatSheet(sheet) {
   sheet.getRange("B:B").setNumberFormat("dd/mm/yyyy hh:mm:ss");
 }
 
+function sendConfirmationEmail(data, registrationNumber) {
+  const subject = "Confirmation d’inscription — Masterclass IA Neo Consulting";
+
+  const htmlBody = buildConfirmationEmail(data, registrationNumber);
+
+  MailApp.sendEmail({
+    to: clean(data.email),
+    subject: subject,
+    htmlBody: htmlBody,
+    name: "Neo Consulting"
+  });
+}
+
+function buildConfirmationEmail(data, registrationNumber) {
+  const fullName = escapeHtml(data.fullName);
+  const whatsapp = escapeHtml(data.whatsapp);
+  const email = escapeHtml(data.email || "");
+  const profile = escapeHtml(data.profile);
+  const passType = escapeHtml(data.passType);
+  const passPrice = escapeHtml(data.passPrice);
+  const paymentMethod = escapeHtml(data.paymentMethod);
+  const transactionId = escapeHtml(data.transactionId);
+
+  return `
+  <div style="margin:0;padding:0;background:#2b2430;font-family:Arial,Helvetica,sans-serif;color:#ffffff;">
+    <div style="max-width:680px;margin:0 auto;padding:28px 18px;">
+
+      <div style="background:linear-gradient(135deg,#3a303f,#1f1a24);border-radius:28px;overflow:hidden;border:1px solid rgba(255,255,255,0.12);">
+
+        <div style="padding:34px 28px 24px;">
+          <div style="display:inline-block;padding:8px 14px;border:2px solid #f2bd2f;border-radius:999px;color:#f2bd2f;font-weight:700;font-size:14px;margin-bottom:22px;">
+            Fais partie de l’aventure !
+          </div>
+
+          <h1 style="margin:0;font-size:42px;line-height:1.05;color:#ffe8d6;font-weight:900;">
+            Utilise l’IA<br>
+            Avant qu’elle<br>
+            Te remplace
+          </h1>
+
+          <p style="font-size:18px;line-height:1.6;color:#f5f0ea;margin-top:22px;">
+            Bonjour <strong>${fullName}</strong>,
+          </p>
+
+          <p style="font-size:16px;line-height:1.7;color:#f5f0ea;">
+            Ton inscription à la masterclass IA de <strong>Neo Consulting</strong> a bien été reçue.
+            Cette formation te donnera les clés pour mieux utiliser l’IA dans tes publications, ton travail, tes idées et tes projets.
+          </p>
+        </div>
+
+        <div style="margin:0 28px 24px;padding:24px;background:rgba(0,0,0,0.35);border-radius:22px;border:1px solid rgba(255,255,255,0.08);">
+          <h2 style="margin:0 0 16px;color:#f2bd2f;font-size:28px;font-family:Georgia,serif;font-weight:400;">
+            Au programme
+          </h2>
+
+          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 1 :</strong> comprendre l’IA sans jargon</p>
+          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 2 :</strong> savoir communiquer avec l’IA</p>
+          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 3 :</strong> les cas d’usage qui changent le quotidien</p>
+          <p style="margin:8px 0;color:#ffffff;font-size:15px;"><strong>Module 4 :</strong> construire son avantage avec l’IA</p>
+        </div>
+
+        <div style="padding:0 28px 24px;">
+          <div style="display:grid;gap:14px;">
+
+            <div style="padding:18px;background:#ffffff;border-radius:20px;color:#251d27;">
+              <p style="margin:0;font-size:14px;color:#7a6f7f;">Date & heure</p>
+              <p style="margin:6px 0 0;font-size:20px;font-weight:900;">
+                ${EVENT_DATE} — de ${EVENT_TIME}
+              </p>
+            </div>
+
+            <div style="padding:18px;background:#ffffff;border-radius:20px;color:#251d27;">
+              <p style="margin:0;font-size:14px;color:#7a6f7f;">Lieu</p>
+              <p style="margin:6px 0 0;font-size:20px;font-weight:900;">
+                ${EVENT_LOCATION}
+              </p>
+            </div>
+
+            <div style="padding:18px;background:#6e1014;border-radius:20px;color:#ffffff;">
+              <p style="margin:0;font-size:14px;color:#ff9aa2;">Ton pass</p>
+              <p style="margin:6px 0 0;font-size:20px;font-weight:900;">
+                ${passType} : ${passPrice}
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        <div style="margin:0 28px 24px;padding:20px;background:rgba(242,189,47,0.12);border:1px solid rgba(242,189,47,0.35);border-radius:22px;">
+          <h3 style="margin:0 0 12px;color:#f2bd2f;font-size:20px;">
+            Détails de ton inscription
+          </h3>
+
+          <p style="margin:7px 0;color:#ffffff;"><strong>N° d’ordre :</strong> ${registrationNumber}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>Nom :</strong> ${fullName}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>WhatsApp :</strong> ${whatsapp}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>Email :</strong> ${email}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>Profil :</strong> ${profile}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>Pass :</strong> ${passType} — ${passPrice}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>Mode de paiement :</strong> ${paymentMethod}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>ID de transaction :</strong> ${transactionId}</p>
+          <p style="margin:7px 0;color:#ffffff;"><strong>Statut :</strong> En attente de vérification</p>
+        </div>
+
+        <div style="padding:0 28px 32px;">
+          <p style="font-size:15px;line-height:1.7;color:#f5f0ea;">
+            Ton inscription sera définitivement confirmée après vérification du paiement.
+            Garde bien ton ID de transaction, il pourra être demandé à l’entrée.
+          </p>
+
+          <div style="margin-top:22px;padding:18px;background:#ffffff;border-radius:999px;text-align:center;color:#251d27;font-weight:900;">
+            Pour plus d’informations : ${EVENT_CONTACT}
+          </div>
+
+          <p style="margin-top:24px;font-size:14px;line-height:1.6;color:#cfc4d6;text-align:center;">
+            Neo Consulting<br>
+            IA • Business • Digital
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>`;
+}
+
 function clean(value) {
   return String(value || "").trim();
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function jsonResponse(object) {

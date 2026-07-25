@@ -228,13 +228,45 @@
           </div>
         </div>
 
+        <div class="pass-panel">
+          <div class="payment-header">
+            <div>
+              <span class="form-kicker">Type de pass</span>
+              <h3>Choisis ton pass</h3>
+            </div>
+            <span class="form-step">02</span>
+          </div>
+
+          <div class="pass-options" role="radiogroup" aria-label="Type de pass">
+            <label class="pass-card active" data-pass="Débutant">
+              <input type="radio" name="passType" value="Débutant" data-price="15 000 FCFA" checked required />
+              <span class="pass-badge">Débutant</span>
+              <span>
+                <strong>Pass Débutant</strong>
+                <small>15 000 FCFA</small>
+              </span>
+            </label>
+
+            <label class="pass-card" data-pass="Expert">
+              <input type="radio" name="passType" value="Expert" data-price="20 000 FCFA" required />
+              <span class="pass-badge expert">Expert</span>
+              <span>
+                <strong>Pass Expert</strong>
+                <small>20 000 FCFA</small>
+              </span>
+            </label>
+          </div>
+
+          <input type="hidden" id="passPrice" name="passPrice" value="15 000 FCFA" />
+        </div>
+
         <div class="payment-panel">
           <div class="payment-header">
             <div>
               <span class="form-kicker">Paiement</span>
               <h3>Choisis ton moyen de paiement</h3>
             </div>
-            <span class="form-step">02</span>
+            <span class="form-step">03</span>
           </div>
 
           <div class="payment-options" role="radiogroup" aria-label="Mode de paiement">

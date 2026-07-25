@@ -5,4 +5,4 @@
  * Exemple :
  * const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxxxxxxxxxxxxxxx/exec";
  */
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxl3Y0TmVmUjV1BH95H2lMtG3dHXqebb9eb83F1pSnD6LNV9zNMGtw0GmeJaRV3EhIP/exec";
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw82TPF4xXcyDKxVtM2hplcpGuWsRSAwaT-8FhV33GkXeRdD3nypstcgGdnbWmPWM04/exec";
