@@ -17,7 +17,7 @@
  * - Copier l’URL /exec dans Config.js
  */
 
-const SPREADSHEET_NAME = "Inscriptions Masterclass IA - The HolyDigi Girl";
+const SPREADSHEET_NAME = "Inscriptions Masterclass IA - Neo Consulting";
 const SHEET_NAME = "Inscriptions";
 
 const HEADERS = [
@@ -30,6 +30,7 @@ const HEADERS = [
   "Mode de paiement",
   "Numéro de paiement",
   "ID de transaction",
+  "Source",
   "Statut"
 ];
 
@@ -57,6 +58,7 @@ function doPost(e) {
       data.paymentMethod,
       data.paymentNumber,
       data.transactionId,
+      data.source || "Neo Consulting - Masterclass IA",
       "En attente de vérification"
     ];
 
@@ -86,7 +88,7 @@ function doGet() {
 
   return jsonResponse({
     success: true,
-    message: "Google Sheets prêt.",
+    message: "Google Sheets Neo Consulting prêt.",
     spreadsheetUrl: sheet.getParent().getUrl()
   });
 }

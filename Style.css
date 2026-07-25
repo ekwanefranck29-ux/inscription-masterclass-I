@@ -1,4 +1,4 @@
-/* Design premium sombre IA / business */
+/* Neo Consulting — Design premium sombre IA / business */
 :root {
   --bg: #070B16;
   --bg-2: #0B1020;
@@ -652,4 +652,36 @@ input:focus, select:focus {
 
   .mobile-sticky-cta { display: flex; }
   body { padding-bottom: 78px; }
+}
+
+
+.nav-links a.active { color: var(--text); }
+.page-hero { padding-bottom: 30px; }
+.compact-heading { max-width: 920px; }
+.page-hero h1 { font-size: clamp(2.6rem, 7vw, 5rem); }
+.registration-only { padding-top: 30px; }
+.final-cta { padding-top: 20px; }
+.final-cta-card {
+  border-radius: var(--radius-xl);
+  padding: clamp(26px, 5vw, 54px);
+  text-align: center;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 36%),
+    radial-gradient(circle at bottom right, rgba(245, 184, 75, 0.12), transparent 36%),
+    var(--panel);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+.final-cta-card h2 {
+  font-size: clamp(2.1rem, 5vw, 4.2rem);
+  letter-spacing: -0.06em;
+  margin: 14px 0;
+}
+.final-cta-card p {
+  color: var(--muted);
+  line-height: 1.8;
+  font-size: 1.05rem;
+  max-width: 700px;
+  margin: 0 auto 26px;
 }
